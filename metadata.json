@@ -1,0 +1,6 @@
+{
+  "name": "fuglor AI",
+  "description": "A sleek, modern AI chat application with light and dark themes by Gabriel, Luca, and Federico featuring streaming intelligence, study resources, and social sharing.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

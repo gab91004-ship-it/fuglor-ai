@@ -1,0 +1,251 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Google Sans Flex', 'Google Sans', system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  :root {
+    font-family: 'Google Sans Flex', 'Google Sans', system-ui, -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    overscroll-behavior: none;
+    height: 100%;
+  }
+
+  button, a, select, input, textarea {
+    touch-action: manipulation;
+  }
+
+  code, pre, kbd, samp, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+}
+
+/* Hide scrollbar for horizontal touch carousels on mobile & tablet */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.45);
+}
+
+/* Bouncing thinking dots */
+@keyframes bounce-dot {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+.animate-bounce-dot-1 {
+  animation: bounce-dot 1.1s infinite ease-in-out;
+}
+
+.animate-bounce-dot-2 {
+  animation: bounce-dot 1.1s infinite ease-in-out 0.18s;
+}
+
+.animate-bounce-dot-3 {
+  animation: bounce-dot 1.1s infinite ease-in-out 0.36s;
+}
+
+@keyframes orbFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-orb-float {
+  animation: orbFloat 4.2s ease-in-out infinite;
+}
+
+@keyframes glowSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-glow-spin {
+  animation: glowSpin 7s linear infinite;
+}
+
+.animate-orb {
+  animation: orbFloat 3.8s ease-in-out infinite;
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
+}
+
+.animate-pop-in {
+  animation: popIn 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fadeInScale {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+}
+
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+}
+
+@keyframes popoverBlur {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
+}
+
+@keyframes backdropFade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-popover-blur {
+  animation: popoverBlur 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-backdrop-fade {
+  animation: backdropFade 0.16s ease-out both;
+}
+
+@keyframes textBlurReveal {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+
+@keyframes blockBlurReveal {
+  0% {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0);
+  }
+}
+
+.animate-text-blur {
+  animation: textBlurReveal 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-block-blur {
+  animation: blockBlurReveal 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.delay-150 { animation-delay: 50ms; }
+.delay-250 { animation-delay: 90ms; }
+.delay-350 { animation-delay: 130ms; }
+.delay-450 { animation-delay: 170ms; }
+.delay-500 { animation-delay: 200ms; }
+.delay-550 { animation-delay: 230ms; }
+
+.bento-card-interactive:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-fade-in-scale,
+  .animate-pop-in,
+  .animate-popover-blur,
+  .animate-backdrop-fade,
+  .animate-orb-float,
+  .animate-glow-spin,
+  .animate-orb,
+  .animate-bounce-dot-1,
+  .animate-bounce-dot-2,
+  .animate-bounce-dot-3,
+  .animate-text-blur,
+  .animate-block-blur {
+    animation: none !important;
+    filter: none !important;
+  }
+}

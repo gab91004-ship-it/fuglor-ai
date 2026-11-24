@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#0E1015" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Fuglor AI" />
+    <title>Fuglor AI</title>
+    <meta name="description" content="A sleek, modern AI chat application with light and dark themes by Gabriel, Luca, and Federico featuring streaming intelligence, study resources, and search grounding." />
+    <link rel="icon" type="image/png" href="/pwa-192x192.png" />
+    <link rel="shortcut icon" type="image/png" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:title" content="Fuglor AI" />
+    <meta property="og:description" content="A sleek, modern AI chat application with light and dark themes by Gabriel, Luca, and Federico featuring streaming intelligence, study resources, and search grounding." />
+    <meta property="og:image" content="/assets/aistudio/immagine_11d61f71.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="/assets/aistudio/immagine_11d61f71.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400..700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script>
+      // Gracefully silence disabled HMR WebSocket transport in sandboxed iframe environment
+      (function() {
+        var OrigWebSocket = window.WebSocket;
+        if (typeof OrigWebSocket === 'function') {
+          var WrappedWebSocket = function(url, protocols) {
+            var isViteHmr =
+              protocols === 'vite-hmr' ||
+              protocols === 'vite-ping' ||
+              (Array.isArray(protocols) && (protocols.indexOf('vite-hmr') !== -1 || protocols.indexOf('vite-ping') !== -1));
+            if (isViteHmr) {
+              return {
+                url: String(url || ''),
+                protocol: typeof protocols === 'string' ? protocols : '',
+                extensions: '',
+                bufferedAmount: 0,
+                binaryType: 'blob',
+                readyState: 0,
+                CONNECTING: 0,
+                OPEN: 1,
+                CLOSING: 2,
+                CLOSED: 3,
+                onopen: null,
+                onclose: null,
+                onerror: null,
+                onmessage: null,
+                addEventListener: function() {},
+                removeEventListener: function() {},
+                dispatchEvent: function() { return false; },
+                send: function() {},
+                close: function() { this.readyState = 3; }
+              };
+            }
+            return arguments.length > 1
+              ? new OrigWebSocket(url, protocols)
+              : new OrigWebSocket(url);
+          };
+          WrappedWebSocket.prototype = OrigWebSocket.prototype;
+          WrappedWebSocket.CONNECTING = OrigWebSocket.CONNECTING;
+          WrappedWebSocket.OPEN = OrigWebSocket.OPEN;
+          WrappedWebSocket.CLOSING = OrigWebSocket.CLOSING;
+          WrappedWebSocket.CLOSED = OrigWebSocket.CLOSED;
+          window.WebSocket = WrappedWebSocket;
+        }
+        var origError = console.error;
+        var origWarn = console.warn;
+        function isViteHmrLog(args) {
+          for (var i = 0; i < args.length; i++) {
+            var a = args[i];
+            var text = '';
+            if (typeof a === 'string') {
+              text = a;
+            } else if (a && typeof a === 'object') {
+              text = (a.message || '') + ' ' + (a.stack || '') + ' ' + String(a);
+            } else {
+              text = String(a || '');
+            }
+            if (
+              text.indexOf('WebSocket') !== -1 ||
+              text.indexOf('[vite]') !== -1 ||
+              text.indexOf('@vite/client') !== -1 ||
+              text.indexOf('createWebSocketModuleRunnerTransport') !== -1
+            ) {
+              return true;
+            }
+          }
+          return false;
+        }
+        console.error = function() {
+          if (isViteHmrLog(arguments)) return;
+          origError.apply(console, arguments);
+        };
+        console.warn = function() {
+          if (isViteHmrLog(arguments)) return;
+          origWarn.apply(console, arguments);
+        };
+      })();
+      window.addEventListener('error', function (e) {
+        var msg = e && e.message ? String(e.message) : '';
+        if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('[vite]') !== -1 || msg.indexOf('@vite/client') !== -1 || msg.indexOf('createWebSocketModuleRunnerTransport') !== -1) {
+          e.stopImmediatePropagation();
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e && e.reason;
+        var msg = reason && reason.message ? String(reason.message) : String(reason || '');
+        if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('[vite]') !== -1 || msg.indexOf('@vite/client') !== -1 || msg.indexOf('createWebSocketModuleRunnerTransport') !== -1) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }
+      }, true);
+      try {
+        var savedTheme = localStorage.getItem('fuglor_theme');
+        if (savedTheme === 'light') {
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (err) {}
+    </script>
+  </head>
+  <body class="bg-[#F4F5F7] dark:bg-[#07090E] text-[#111318] dark:text-slate-100 antialiased selection:bg-sky-500/20 selection:text-sky-900 dark:selection:bg-cyan-500/25 dark:selection:text-cyan-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
