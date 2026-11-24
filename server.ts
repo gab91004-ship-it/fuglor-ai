@@ -16,38 +16,95 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
-let cachedClient: GoogleGenAI | null = null;
-let cachedApiKey = '';
 const modelCooldownUntil: Record<string, number> = {};
 
+// ---------------------------------------------------------------------------
+// Multi-key pool: ruota tra piu' chiavi Gemini (GEMINI_API_KEY_1..N oppure
+// GEMINI_API_KEYS="key1,key2,...") cosi' il limite gratuito RPD/RPM si divide
+// tra tutte le chiavi e l'app regge anche con centinaia di studenti collegati.
+// ---------------------------------------------------------------------------
+type PoolEntry = { apiKey: string; client: GoogleGenAI; cooldownUntil: number };
+
+function loadApiKeys(): string[] {
+  const fromList = (process.env.GEMINI_API_KEYS || '')
+    .split(/[,;\s]+/)
+    .map((k) => k.trim())
+    .filter(Boolean);
+  const numbered: string[] = [];
+  for (let i = 1; i <= 20; i++) {
+    const k = (process.env[`GEMINI_API_KEY_${i}`] || '').trim();
+    if (k) numbered.push(k);
+  }
+  const single = (process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim();
+  const all = [...numbered, ...fromList, ...(single ? [single] : [])];
+  // Rimuove duplicati preservando l'ordine
+  return Array.from(new Set(all));
+}
+
+let keyPool: PoolEntry[] = [];
+let poolSignature = '';
+let poolCursor = 0;
+
+function buildPool(force = false): PoolEntry[] {
+  const keys = loadApiKeys();
+  const sig = keys.join('|');
+  if (!force && keyPool.length > 0 && sig === poolSignature) {
+    return keyPool;
+  }
+  poolSignature = sig;
+  keyPool = keys.map((apiKey) => ({
+    apiKey,
+    client: new GoogleGenAI({
+      apiKey,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+    }),
+    cooldownUntil: 0,
+  }));
+  return keyPool;
+}
+
+// Ritorna la prima chiave disponibile (non in cooldown). Se tutte sono in
+// cooldown, usa comunque quella che si libera prima (round-robin) cosi' gli
+// utenti non restano bloccati.
 function getGeminiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
-  if (!apiKey) {
+  const pool = buildPool();
+  if (pool.length === 0) {
     throw new Error('Chiave API non trovata. PERMISSION_DENIED: Seleziona una chiave API nelle impostazioni di AI Studio.');
   }
-  if (cachedClient && cachedApiKey === apiKey) {
-    return cachedClient;
+  const now = Date.now();
+  for (let i = 0; i < pool.length; i++) {
+    const entry = pool[(poolCursor + i) % pool.length];
+    if (entry.cooldownUntil <= now) {
+      poolCursor = (pool.indexOf(entry) + 1) % pool.length;
+      return entry.client;
+    }
   }
-  cachedApiKey = apiKey;
-  cachedClient = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
-  return cachedClient;
+  // Tutte in cooldown: scegli quella che si libera prima
+  const earliest = pool.reduce((a, b) => (a.cooldownUntil < b.cooldownUntil ? a : b));
+  return earliest.client;
+}
+
+function markKeyRateLimited(client: GoogleGenAI, seconds: number) {
+  const entry = buildPool().find((e) => e.client === client);
+  if (entry) {
+    entry.cooldownUntil = Date.now() + seconds * 1000;
+  }
+}
+
+function isRateLimitError(err: unknown): boolean {
+  const raw = ((err as Error)?.message || String(err || '')).toLowerCase();
+  return raw.includes('429') || raw.includes('resource_exhausted') || raw.includes('quota') || raw.includes('too many requests');
 }
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  const hasKey = Boolean(process.env.GEMINI_API_KEY || process.env.API_KEY);
+  const pool = buildPool();
   res.json({
     status: 'ok',
     name: 'Fuglor AI',
     team: ['Federico', 'Luca', 'Gabriel'],
-    hasKey,
+    hasKey: pool.length > 0,
+    keyCount: pool.length,
   });
 });
 
@@ -61,39 +118,55 @@ app.post('/api/tts', async (req, res) => {
 
     // Limit text chunk for responsive TTS (up to 1000 characters in 1 cohesive audio clip)
     const cleanText = text.trim().slice(0, 1000);
-    const ai = getGeminiClient();
 
     // Map requested voices (Kore: Natural Female, Puck: Natural Male, Fenrir: Warm Male, Zephyr: Calm Female)
     const validVoices = ['Kore', 'Puck', 'Fenrir', 'Zephyr', 'Charon'];
     const chosenVoice = validVoices.includes(voice) ? voice : 'Kore';
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash-lite-tts',
-      contents: [
-        {
-          role: 'user',
-          parts: [
+    // Prova con piu' chiavi API del pool: se una e' in quota si passa alla successiva
+    let base64Audio: string | undefined;
+    let lastErr: unknown = null;
+    const maxKeyTries = Math.max(1, buildPool().length);
+    for (let k = 0; k < maxKeyTries; k++) {
+      const ai = getGeminiClient();
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash-lite-tts',
+          contents: [
             {
-              text: cleanText,
-              speechMetadata: {
-                style: 'Natural, warm, friendly Italian student tutor with clear human-like intonation and modern conversational style.',
-              },
+              role: 'user',
+              parts: [
+                {
+                  text: cleanText,
+                  speechMetadata: {
+                    style: 'Natural, warm, friendly Italian student tutor with clear human-like intonation and modern conversational style.',
+                  },
+                },
+              ],
             },
           ],
-        },
-      ],
-      config: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: chosenVoice },
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: chosenVoice },
+              },
+            },
           },
-        },
-      },
-    });
-
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        });
+        base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        break;
+      } catch (keyErr: unknown) {
+        lastErr = keyErr;
+        if (isRateLimitError(keyErr)) {
+          markKeyRateLimited(ai, 75);
+          continue;
+        }
+        throw keyErr;
+      }
+    }
     if (!base64Audio) {
+      if (lastErr) throw lastErr;
       return res.json({ fallback: true, message: 'Nessun flusso audio generato.' });
     }
 
@@ -129,29 +202,46 @@ app.post('/api/transcribe', async (req, res) => {
       return res.status(400).json({ error: 'Nessun audio ricevuto.' });
     }
     const cleanBase64 = audioBase64.includes('base64,') ? audioBase64.split('base64,')[1] : audioBase64;
-    const ai = getGeminiClient();
     const prompt =
       language === 'en'
         ? 'Transcribe this speech accurately into clean plain text without timestamps or extra commentary. Return only the spoken text.'
         : 'Trascrivi fedelmente questo parlato in italiano in testo pulito senza commenti aggiuntivi o timestamp. Restituisci solo il testo parlato.';
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-transcribe',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: cleanBase64,
-            },
+    // Prova con piu' chiavi API del pool: se una e' in quota si passa alla successiva
+    let transcribedText: string | null = null;
+    const maxKeyTries = Math.max(1, buildPool().length);
+    for (let k = 0; k < maxKeyTries; k++) {
+      const ai = getGeminiClient();
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.5-transcribe',
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: cleanBase64,
+                },
+              },
+              { text: prompt },
+            ],
           },
-          { text: prompt },
-        ],
-      },
-    });
+        });
+        transcribedText = (response.text || '').trim();
+        break;
+      } catch (keyErr: unknown) {
+        if (isRateLimitError(keyErr)) {
+          markKeyRateLimited(ai, 75);
+          continue;
+        }
+        throw keyErr;
+      }
+    }
 
-    const text = (response.text || '').trim();
-    res.json({ text });
+    if (transcribedText === null) {
+      return res.status(500).json({ error: 'Trascrizione non riuscita: tutte le chiavi API sono momentaneamente in quota.' });
+    }
+    res.json({ text: transcribedText });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Trascrizione non riuscita.';
     res.status(500).json({ error: msg });
@@ -444,11 +534,18 @@ ${studyResourcesContext}`;
     let streamedAnyChunk = false;
     let lastError: unknown = null;
     const dailyExhaustedModels = new Set<string>();
+    // Tentativi extra quando si hanno piu' chiavi API nel pool: ogni 429
+    // si mette in cooldown la chiave usata e si riprova con la successiva.
+    const keyCount = buildPool().length;
+    const maxAttempts = attemptsToTry.length + Math.max(0, keyCount - 1) * 2;
 
-    for (let i = 0; i < attemptsToTry.length; i++) {
+    for (let i = 0; i < maxAttempts; i++) {
       if (clientDisconnected) return;
-      const { model: candidateModel, withSearch: candidateWithSearch, useThinking } = attemptsToTry[i];
+      const attempt = attemptsToTry[Math.min(i, attemptsToTry.length - 1)];
+      const { model: candidateModel, withSearch: candidateWithSearch, useThinking } = attempt;
       if (dailyExhaustedModels.has(candidateModel)) {
+        // Con una sola chiave non ha senso continuare a girare a vuoto
+        if (keyCount <= 1 && i >= attemptsToTry.length - 1) break;
         continue;
       }
       try {
@@ -473,35 +570,44 @@ ${studyResourcesContext}`;
         }
 
         const aiClient = getGeminiClient();
-        const responseStream = await aiClient.models.generateContentStream({
-          model: candidateModel,
-          contents,
-          config: attemptConfig,
-        });
+        try {
+          const responseStream = await aiClient.models.generateContentStream({
+            model: candidateModel,
+            contents,
+            config: attemptConfig,
+          });
 
-        for await (const chunk of responseStream) {
-          if (clientDisconnected) return;
-          const text = chunk.text ?? '';
-          const candidate = chunk.candidates?.[0];
-          const groundingChunks = candidate?.groundingMetadata?.groundingChunks;
-          let sources: Array<{ uri: string; title: string }> = [];
+          for await (const chunk of responseStream) {
+            if (clientDisconnected) return;
+            const text = chunk.text ?? '';
+            const candidate = chunk.candidates?.[0];
+            const groundingChunks = candidate?.groundingMetadata?.groundingChunks;
+            let sources: Array<{ uri: string; title: string }> = [];
 
-          if (Array.isArray(groundingChunks)) {
-            sources = groundingChunks
-              .map((gc) => {
-                const web = (gc as { web?: { uri?: string; title?: string } }).web;
-                return web?.uri ? { uri: web.uri, title: web.title || web.uri } : null;
-              })
-              .filter((s): s is { uri: string; title: string } => Boolean(s));
-          }
+            if (Array.isArray(groundingChunks)) {
+              sources = groundingChunks
+                .map((gc) => {
+                  const web = (gc as { web?: { uri?: string; title?: string } }).web;
+                  return web?.uri ? { uri: web.uri, title: web.title || web.uri } : null;
+                })
+                .filter((s): s is { uri: string; title: string } => Boolean(s));
+            }
 
-          if (text || sources.length > 0) {
-            streamedAnyChunk = true;
-            res.write(`data: ${JSON.stringify({ text, sources })}\n\n`);
-            if (typeof (res as any).flush === 'function') {
-              (res as any).flush();
+            if (text || sources.length > 0) {
+              streamedAnyChunk = true;
+              res.write(`data: ${JSON.stringify({ text, sources })}\n\n`);
+              if (typeof (res as any).flush === 'function') {
+                (res as any).flush();
+              }
             }
           }
+        } catch (streamErr: unknown) {
+          // Se la chiave corrente e' in rate-limit la mettiamo in cooldown:
+          // il prossimo tentativo usera' automaticamente la chiave successiva.
+          if (!streamedAnyChunk && isRateLimitError(streamErr)) {
+            markKeyRateLimited(aiClient, 75);
+          }
+          throw streamErr;
         }
 
         // Successfully completed streaming
@@ -540,11 +646,8 @@ ${studyResourcesContext}`;
         }
 
         // Exponential backoff with jitter before retrying
-        if (i < attemptsToTry.length - 1 && !clientDisconnected) {
-          const nextAttempt = attemptsToTry[i + 1];
-          if (dailyExhaustedModels.has(nextAttempt.model)) {
-            continue;
-          }
+        if (i < maxAttempts - 1 && !clientDisconnected) {
+          const nextAttempt = attemptsToTry[Math.min(i + 1, attemptsToTry.length - 1)];
           const jitter = Math.floor(Math.random() * 200);
           const baseDelay =
             nextAttempt.model !== candidateModel && i === 0
